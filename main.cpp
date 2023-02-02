@@ -29,21 +29,16 @@ int main(){
 
     std::vector<double> output;
 
-    for(int i=0; i<4; ++i){
-        output = p.eval(input);
-        std:: cout << output[0] << '\n';
-    }
+    cGene X(0,1); X.weight = -0.7; Genotype h; h << X;
 
-    g.mutateAddConnection();
+    in = {0}; out = {1};
+    h.setSensors(in); h.setOutputs(out);
 
-    Phenotype q(g);
+    h.mutateAddNode(3);
 
-    std::cout << '\n' << '\n';
+    Phenotype q(h);
 
-    for(int i=0; i<4; ++i){
-        output = q.eval(input);
-        std:: cout << output[0] << '\n';
-    }
+
 
     return 0;
 }

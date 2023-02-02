@@ -59,6 +59,10 @@ class Genotype{
     std::vector<int> outputs;
 
     Genotype &operator << (cGene &g){ // overload << operator for easy attaching of new connect genes
+        if(this->nGenes[g.outNode].type == SENSOR){
+            throw std::invalid_argument("Connection cannot output to sensor node");
+        }
+
         this->cGenes.push_back(g);
         int in = g.inNode;
         int out = g.outNode;
@@ -127,6 +131,35 @@ class Genotype{
         *(this) << newConnection;
 
         return this->cGenes.back(); // return a reference to the newly created gene
+    }
+
+    void mutateAddNode(int newNodeVal){
+        for(auto & node : this->nGenes){
+            if(node.index == newNodeVal){
+                throw std::invalid_argument("Node index already exists in genome");
+            }
+        }
+
+        std::vector<int> temp; temp.resize(this->cGenes.size());
+
+        for(int i=0; i<temp.size(); ++i){ // vector of indexes corresponding to connect genes
+            temp[i] = i;
+        }
+
+        std::random_device rd;
+        std::mt19937 g(rd()); // seed random generator
+
+        std::shuffle(temp.begin(), temp.end(), g); // reorder
+        int index = temp[0]; // index of gene where node is to be inserted
+
+        cGene &oldGene = this->cGenes[index]; // get a reference of the gene to be replaced
+
+        cGene newGeneA(oldGene.inNode, newNodeVal); newGeneA.weight = 1;
+        cGene newGeneB(newNodeVal, oldGene.outNode); newGeneB.weight = oldGene.weight;
+
+        oldGene.enable = false;
+
+        *this << newGeneA << newGeneB;
     }
 };
 
