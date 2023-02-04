@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cmath>
 #include <random>
+#include <chrono>
 
 namespace neat{
 
@@ -82,7 +83,7 @@ class Genotype{
         return *this;
     }
 
-    void setSensors(std::vector<int> &s){ // for setting sensor nodes
+    Genotype& setSensors(std::vector<int> &s){ // for setting sensor nodes
         for(auto & i : s){
             if(i >= this->nGenes.size()){
                 throw std::invalid_argument("Sensor index does not correspond to any node");
@@ -90,9 +91,11 @@ class Genotype{
             this->nGenes[i].type = SENSOR;
         }
         this->sensors = s;
+
+        return *this;
     }
 
-    void setOutputs(std::vector<int> &s){ // for setting output nodes
+    Genotype& setOutputs(std::vector<int> &s){ // for setting output nodes
         for(auto & i : s){
             if(i >= this->nGenes.size()){
                 throw std::invalid_argument("Output index does not correspond to any node");
@@ -100,6 +103,8 @@ class Genotype{
             this->nGenes[i].type = OUTPUT;
         }
         this->outputs = s;
+
+        return *this;
     }
 
     cGene& mutateAddConnection(){
@@ -316,6 +321,12 @@ class Phenotype{
 
 class System{
 public:
+    double inheritDisable = 0.75;
+
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    std::mt19937 gen{seed};
+    std::uniform_real_distribution<double> dist; // default uniform distribution on [0,1)
+
     std::vector<Genotype> population;
     std::vector<cGene> geneList;
 
@@ -323,9 +334,72 @@ public:
         this->population.resize(popLimit);
     }
 
+    Genotype crossover(Genotype & parent1, Genotype & parent2, double fit1, double fit2){
+        if(parent1.sensors != parent2.sensors){
+            throw std::invalid_argument("Tried to crossover parents with mismatched sensor nodes");
+        }
 
+        if(parent1.outputs != parent2.outputs){
+            throw std::invalid_argument("Tried to crossover parents with mismatched output nodes");
+        }
+
+        Genotype child;
+
+        std::vector<cGene> disjoint1 = parent1.cGenes; // genes from parent 1 which are disjoint
+        std::vector<cGene> disjoint2 = parent2.cGenes; // genes from parent 2 which are disjoint
+
+        for(auto gene1 = parent1.cGenes.begin();  gene1 != parent1.cGenes.end(); ++gene1){ // first pass to find matching genes
+            for(auto gene2 = parent2.cGenes.begin();  gene1 != parent2.cGenes.end(); ++gene1){
+                if(gene1->inov == gene2->inov){ // in the case of matching innovation numbers
+                    if(dist(gen) < 0.5){
+                        child << *gene1;
+                    } else {
+                        child << *gene2;
+                    }
+
+                    if(!(gene1->enable) || !(gene2->enable)){ // probabilistic disabling
+                        if(dist(gen) < this->inheritDisable){
+                            child.cGenes.back().enable = false;
+                        } else {
+                            child.cGenes.back().enable = true;
+                        }
+                    }
+
+                    disjoint1.erase(gene1); // update disjoint vectors
+                    disjoint2.erase(gene2);
+
+                    break;
+                }
+            }
+        }
+
+        if(fit1 > fit2){ // assigning disjoint/excess genes based on relative fitness
+            for(auto & gene : disjoint1){
+                child << gene;
+            }
+        } else if(fit1 < fit2){
+            for(auto & gene : disjoint2){
+                child << gene;
+            }
+        } else { // 50% inheritance odds given equal fitness
+            for(auto & gene : disjoint1){
+                if(dist(gen) < 0.5){
+                    child << gene;
+                }
+            }
+
+            for(auto & gene : disjoint2){
+                if(dist(gen) < 0.5){
+                    child << gene;
+                }
+            }
+        }
+
+        child.setSensors(parent1.sensors).setOutputs(parent1.outputs); // must be done after gene assignment
+
+        return child;
+    }
 
 };
-
 
 }
