@@ -60,11 +60,6 @@ class Genotype{
     std::vector<int> outputs;
 
     Genotype &operator << (cGene &g){ // overload << operator for easy attaching of new connect genes
-        if(this->nGenes[g.outNode].type == SENSOR){
-            throw std::invalid_argument("Connection cannot output to sensor node");
-        }
-
-        this->cGenes.push_back(g);
         int in = g.inNode;
         int out = g.outNode;
 
@@ -79,6 +74,12 @@ class Genotype{
         if(this->nGenes[out].index == -1){ // create node if unassigned
             this->nGenes[out].index = out;
         }
+
+        if(this->nGenes[g.outNode].type == SENSOR){
+            throw std::invalid_argument("Connection cannot output to sensor node");
+        }
+
+        this->cGenes.push_back(g);
 
         return *this;
     }
@@ -321,11 +322,15 @@ class Phenotype{
 
 class System{
 public:
-    double inheritDisable = 0.75;
+    double inheritDisable = 0.75; // a gene is disabled if it is disabled in either parent
+    double perturbWeight = 0.9; // a gene is uniformly perturbed - otherwise randomly assigned a new weight
+
+    double perturbation = 0.01; // the amount by which gene weights are perturbed
 
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     std::mt19937 gen{seed};
     std::uniform_real_distribution<double> dist; // default uniform distribution on [0,1)
+    std::uniform_real_distribution<double> weightDist{-2.0, 2.0}; // for randomly assigning weights
 
     std::vector<Genotype> population;
     std::vector<cGene> geneList;
@@ -400,6 +405,21 @@ public:
         return child;
     }
 
+    Genotype & mutate(Genotype & g){
+        for(auto & gene : g.cGenes){
+            if(dist(gen) < perturbWeight){
+                if(dist(gen) < 0.5){
+                    gene.weight += perturbation;
+                } else {
+                    gene.weight -= perturbation;
+                }
+            } else {
+                gene.weight = weightDist(gen);
+            }
+        }
+
+        return g;
+    }
 };
 
 }
