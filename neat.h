@@ -326,17 +326,79 @@ public:
     double perturbWeight = 0.9; // a gene is uniformly perturbed - otherwise randomly assigned a new weight
 
     double perturbation = 0.01; // the amount by which gene weights are perturbed
+    double c1 = 1.0, c2 = 1.0, c3 = 0.4; // default distance function weights
 
-    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count(); // seeding random devices
     std::mt19937 gen{seed};
     std::uniform_real_distribution<double> dist; // default uniform distribution on [0,1)
-    std::uniform_real_distribution<double> weightDist{-2.0, 2.0}; // for randomly assigning weights
+    std::uniform_real_distribution<double> weightDist{-2.0, 2.0}; // distribution for randomly assigning weights
 
     std::vector<Genotype> population;
     std::vector<cGene> geneList;
 
     explicit System(int popLimit){
         this->population.resize(popLimit);
+    }
+
+    double distance(Genotype & g1, Genotype & g2){
+        double N = 1.0;
+
+        if(std::max(g1.cGenes.size(), g2.cGenes.size()) >= 20){ // don't implement normalisation if both genomes have < 20 genes
+            N = (double)std::max(g1.cGenes.size(), g2.cGenes.size());
+        }
+
+        int maxInov1 = 0, maxInov2 = 0;
+
+        for(auto & gene : g1.cGenes){ // looking for largest innovation numbers appearing in both genomes
+            if(gene.inov > maxInov1){
+                maxInov1 = gene.inov;
+            }
+        }
+
+        for(auto & gene : g2.cGenes){
+            if(gene.inov > maxInov2){
+                maxInov2 = gene.inov;
+            }
+        }
+
+        int inovRange = std::min(maxInov1, maxInov2); // for determining whether a gene is disjoint or excess
+
+        std::vector<cGene> nonMatch1 = g1.cGenes;
+        std::vector<cGene> nonMatch2 = g2.cGenes;
+
+        double E = 0, D = 0, W = 0, numMatching = 0;
+
+        for(auto gene1 = g1.cGenes.begin();  gene1 != g1.cGenes.end(); ++gene1){ // first pass to find matching genes
+            for(auto gene2 = g2.cGenes.begin();  gene2 != g2.cGenes.end(); ++gene2){
+                if(gene1->inov == gene2->inov){ // in the case of matching innovation numbers
+                    W += std::abs(gene1->weight - gene2->weight); // absolute weight difference
+                    numMatching++;
+
+                    nonMatch1.erase(gene1); // update disjoint vectors
+                    nonMatch2.erase(gene2); // QUESTIONABLE -- may need to preserve indices
+
+                    break;
+                }
+            }
+        }
+
+        for(auto & gene : nonMatch1){ // sorting disjoint/excess genes
+            if(gene.inov <= inovRange){
+                D++;
+            } else {
+                E++;
+            }
+        }
+
+        for(auto & gene : nonMatch2){
+            if(gene.inov <= inovRange){
+                D++;
+            } else {
+                E++;
+            }
+        }
+
+        return ((this->c1 * E) / N) + ((this->c2 * D) / N) + ((this->c3 * W) / numMatching); // final distance computation
     }
 
     Genotype crossover(Genotype & parent1, Genotype & parent2, double fit1, double fit2){
