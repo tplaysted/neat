@@ -39,6 +39,21 @@ public:
         this->outNode = out;
     }
 
+    cGene & setWeight(double w){ // setters for initialisation chaining
+        this->weight = w;
+        return *this;
+    }
+
+    cGene & setInov(int i){
+        this->inov = i;
+        return *this;
+    }
+
+    cGene & setEnable(bool e){
+        this->enable = e;
+        return *this;
+    }
+
 };
 
 class nGene{
@@ -361,7 +376,7 @@ public:
             }
         }
 
-        std::vector<cGene> hash1(maxInov1), hash2(maxInov2); // indexed arrays for storing genes
+        std::vector<cGene> hash1(maxInov1 + 1), hash2(maxInov2 + 1); // indexed arrays for storing genes
 
         int inovRange = std::min(maxInov1, maxInov2); // for determining whether a gene is disjoint or excess
 
@@ -399,12 +414,16 @@ public:
             for(auto & gene : g2.cGenes){
                 if(gene.inov > inovRange) {
                     ++E;
+                } else if(hash1[gene.inov].inov == -1){
+                    ++D;
                 }
             }
         } else {
             for(auto & gene : g1.cGenes){
                 if(gene.inov > inovRange) {
                     ++E;
+                } else if(hash2[gene.inov].inov == -1){
+                    ++D;
                 }
             }
         }
@@ -437,7 +456,7 @@ public:
             }
         }
 
-        std::vector<cGene> hash1(maxInov1), hash2(maxInov2); // indexed arrays for storing genes
+        std::vector<cGene> hash1(maxInov1 + 1), hash2(maxInov2 + 1); // indexed arrays for storing genes
 
         int inovRange = std::min(maxInov1, maxInov2); // for determining whether a gene is disjoint or excess
 
@@ -478,16 +497,24 @@ public:
             }
         }
 
-        if(maxInov1 <= maxInov2){ // iterate over larger genome to find excess genes
+        if(maxInov1 <= maxInov2){ // iterate over larger genome to find disjoint / excess genes
             for(auto & gene : parent2.cGenes){
                 if(gene.inov > inovRange) {
                     nonMatched2.push_back(gene);
+                } else {
+                    if(hash1[gene.inov].inov == -1){
+                        nonMatched2.push_back(gene);
+                    }
                 }
             }
         } else {
             for(auto & gene : parent1.cGenes){
                 if(gene.inov > inovRange) {
                     nonMatched1.push_back(gene);
+                } else {
+                    if(hash2[gene.inov].inov == -1){
+                        nonMatched2.push_back(gene);
+                    }
                 }
             }
         }
@@ -502,8 +529,9 @@ public:
             child << gene;
         }
 
+        // attaching disjoint / excess genes
         if(fit1 > fit2){ // parent 1 fitter
-            for(auto & gene : parent1.cGenes){
+            for(auto & gene : nonMatched1){
                 if(!gene.enable){ // probabilistic disabling
                     if(dist(gen) < inheritDisable){
                         gene.enable = false;
@@ -513,7 +541,7 @@ public:
                 child << gene;
             }
         } else if (fit1 < fit2){ // parent 2 fitter
-            for(auto & gene : parent2.cGenes){
+            for(auto & gene : nonMatched2){
                 if(!gene.enable){ // probabilistic disabling
                     if(dist(gen) < inheritDisable){
                         gene.enable = false;
@@ -523,7 +551,7 @@ public:
                 child << gene;
             }
         } else { // equal fitness
-            for(auto & gene : parent1.cGenes){
+            for(auto & gene : nonMatched1){
                 if(dist(gen) < 0.5){
                     if(!gene.enable){ // probabilistic disabling
                         if(dist(gen) < inheritDisable){
@@ -535,7 +563,7 @@ public:
                 }
             }
 
-            for(auto & gene : parent2.cGenes){
+            for(auto & gene : nonMatched2){
                 if(dist(gen) < 0.5){
                     if(!gene.enable){ // probabilistic disabling
                         if(dist(gen) < inheritDisable){
