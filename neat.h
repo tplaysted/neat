@@ -340,7 +340,7 @@ public:
         this->population.resize(popLimit);
     }
 
-    double distance(Genotype & g1, Genotype & g2){
+    double distance(Genotype & g1, Genotype & g2) const{
         double N = 1.0;
 
         if(std::max(g1.cGenes.size(), g2.cGenes.size()) >= 20){ // don't implement normalisation if both genomes have < 20 genes
@@ -361,40 +361,51 @@ public:
             }
         }
 
+        std::vector<cGene> hash1(maxInov1), hash2(maxInov2); // indexed arrays for storing genes
+
         int inovRange = std::min(maxInov1, maxInov2); // for determining whether a gene is disjoint or excess
 
-        std::vector<cGene> nonMatch1 = g1.cGenes;
-        std::vector<cGene> nonMatch2 = g2.cGenes;
+        for(auto & gene : g1.cGenes){ // filling indexed arrays
+            hash1[gene.inov] = gene;
+        }
 
-        double E = 0, D = 0, W = 0, numMatching = 0;
+        for(auto & gene : g2.cGenes){
+            hash2[gene.inov] = gene;
+        }
 
-        for(auto gene1 = g1.cGenes.begin();  gene1 != g1.cGenes.end(); ++gene1){ // first pass to find matching genes
-            for(auto gene2 = g2.cGenes.begin();  gene2 != g2.cGenes.end(); ++gene2){
-                if(gene1->inov == gene2->inov){ // in the case of matching innovation numbers
-                    W += std::abs(gene1->weight - gene2->weight); // absolute weight difference
-                    numMatching++;
+        double D=0, E=0, W=0, numMatching=0;
 
-                    nonMatch1.erase(gene1); // update disjoint vectors
-                    nonMatch2.erase(gene2); // QUESTIONABLE -- may need to preserve indices
-
-                    break;
+        if(maxInov1 <= maxInov2){ // iterate over smaller genome to find matched / disjoint genes
+            for(auto & gene : g1.cGenes){
+                if(hash2[gene.inov].inov != -1 ){
+                    W += std::abs(hash2[gene.inov].weight - gene.weight);
+                    ++numMatching;
+                } else {
+                    ++D;
+                }
+            }
+        } else {
+            for(auto & gene : g2.cGenes){
+                if(hash1[gene.inov].inov != -1 ){
+                    W += std::abs(hash1[gene.inov].weight - gene.weight);
+                    ++numMatching;
+                } else {
+                    ++D;
                 }
             }
         }
 
-        for(auto & gene : nonMatch1){ // sorting disjoint/excess genes
-            if(gene.inov <= inovRange){
-                D++;
-            } else {
-                E++;
+        if(maxInov1 <= maxInov2){ // iterate over larger genome to find excess genes
+            for(auto & gene : g2.cGenes){
+                if(gene.inov > inovRange) {
+                    ++E;
+                }
             }
-        }
-
-        for(auto & gene : nonMatch2){
-            if(gene.inov <= inovRange){
-                D++;
-            } else {
-                E++;
+        } else {
+            for(auto & gene : g1.cGenes){
+                if(gene.inov > inovRange) {
+                    ++E;
+                }
             }
         }
 
@@ -412,51 +423,126 @@ public:
 
         Genotype child;
 
-        std::vector<cGene> disjoint1 = parent1.cGenes; // genes from parent 1 which are disjoint
-        std::vector<cGene> disjoint2 = parent2.cGenes; // genes from parent 2 which are disjoint
+        int maxInov1 = 0, maxInov2 = 0;
 
-        for(auto gene1 = parent1.cGenes.begin();  gene1 != parent1.cGenes.end(); ++gene1){ // first pass to find matching genes
-            for(auto gene2 = parent2.cGenes.begin();  gene1 != parent2.cGenes.end(); ++gene1){
-                if(gene1->inov == gene2->inov){ // in the case of matching innovation numbers
+        for(auto & gene : parent1.cGenes){ // looking for largest innovation numbers appearing in both genomes
+            if(gene.inov > maxInov1){
+                maxInov1 = gene.inov;
+            }
+        }
+
+        for(auto & gene : parent2.cGenes){
+            if(gene.inov > maxInov2){
+                maxInov2 = gene.inov;
+            }
+        }
+
+        std::vector<cGene> hash1(maxInov1), hash2(maxInov2); // indexed arrays for storing genes
+
+        int inovRange = std::min(maxInov1, maxInov2); // for determining whether a gene is disjoint or excess
+
+        for(auto & gene : parent1.cGenes){ // filling indexed arrays
+            hash1[gene.inov] = gene;
+        }
+
+        for(auto & gene : parent2.cGenes){
+            hash2[gene.inov] = gene;
+        }
+
+        std::vector<cGene> matched;
+        std::vector<cGene> nonMatched1, nonMatched2;
+
+        if(maxInov1 <= maxInov2){ // iterate over smaller genome to find matched / disjoint genes
+            for(auto & gene : parent1.cGenes){
+                if(hash2[gene.inov].inov != -1 ){ // in the case of matched genes
                     if(dist(gen) < 0.5){
-                        child << *gene1;
+                        matched.push_back(gene);
                     } else {
-                        child << *gene2;
+                        matched.push_back(hash2[gene.inov]);
                     }
-
-                    if(!(gene1->enable) || !(gene2->enable)){ // probabilistic disabling
-                        if(dist(gen) < this->inheritDisable){
-                            child.cGenes.back().enable = false;
-                        } else {
-                            child.cGenes.back().enable = true;
-                        }
+                } else { // the gene is disjoint
+                    nonMatched1.push_back(gene);
+                }
+            }
+        } else {
+            for(auto & gene : parent2.cGenes){
+                if(hash1[gene.inov].inov != -1 ){ // in the case of matched genes
+                    if(dist(gen) < 0.5){
+                        matched.push_back(gene);
+                    } else {
+                        matched.push_back(hash1[gene.inov]);
                     }
-
-                    disjoint1.erase(gene1); // update disjoint vectors
-                    disjoint2.erase(gene2);
-
-                    break;
+                } else { // the gene is disjoint
+                    nonMatched2.push_back(gene);
                 }
             }
         }
 
-        if(fit1 > fit2){ // assigning disjoint/excess genes based on relative fitness
-            for(auto & gene : disjoint1){
+        if(maxInov1 <= maxInov2){ // iterate over larger genome to find excess genes
+            for(auto & gene : parent2.cGenes){
+                if(gene.inov > inovRange) {
+                    nonMatched2.push_back(gene);
+                }
+            }
+        } else {
+            for(auto & gene : parent1.cGenes){
+                if(gene.inov > inovRange) {
+                    nonMatched1.push_back(gene);
+                }
+            }
+        }
+
+        for(auto & gene : matched){ // attached matched genes to child
+            if(!hash1[gene.inov].enable || !hash2[gene.inov].enable){ // probabilistic disabling
+                if(dist(gen) < inheritDisable){
+                    gene.enable = false;
+                }
+            }
+
+            child << gene;
+        }
+
+        if(fit1 > fit2){ // parent 1 fitter
+            for(auto & gene : parent1.cGenes){
+                if(!gene.enable){ // probabilistic disabling
+                    if(dist(gen) < inheritDisable){
+                        gene.enable = false;
+                    }
+                }
+
                 child << gene;
             }
-        } else if(fit1 < fit2){
-            for(auto & gene : disjoint2){
+        } else if (fit1 < fit2){ // parent 2 fitter
+            for(auto & gene : parent2.cGenes){
+                if(!gene.enable){ // probabilistic disabling
+                    if(dist(gen) < inheritDisable){
+                        gene.enable = false;
+                    }
+                }
+
                 child << gene;
             }
-        } else { // 50% inheritance odds given equal fitness
-            for(auto & gene : disjoint1){
+        } else { // equal fitness
+            for(auto & gene : parent1.cGenes){
                 if(dist(gen) < 0.5){
+                    if(!gene.enable){ // probabilistic disabling
+                        if(dist(gen) < inheritDisable){
+                            gene.enable = false;
+                        }
+                    }
+
                     child << gene;
                 }
             }
 
-            for(auto & gene : disjoint2){
+            for(auto & gene : parent2.cGenes){
                 if(dist(gen) < 0.5){
+                    if(!gene.enable){ // probabilistic disabling
+                        if(dist(gen) < inheritDisable){
+                            gene.enable = false;
+                        }
+                    }
+
                     child << gene;
                 }
             }
