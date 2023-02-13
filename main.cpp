@@ -42,9 +42,16 @@ int main(){
 
     System s(1);
 
+    s.mutate(parent1);
+    s.mutate(parent2);
+
     Genotype child = s.crossover(parent1, parent2, 1, 1);
 
-    std::cout << s.distance(child, parent2);
+    std::cout << s.distance(parent1, parent2) << '\n';
+
+    parent1.mutateAddConnection().setInov(11);
+
+    std::cout << s.distance(parent1, parent2) << '\n';
 
     return 0;
 }
